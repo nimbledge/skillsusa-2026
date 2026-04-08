@@ -118,7 +118,8 @@ def complete_sale():
     try:
         for i in cart:
             cur.execute(
-                "UPDATE inventory SET qty_on_hand - ? WHERE sku=?", (i["qty"], i["sku"])
+                "UPDATE inventory SET qty_on_hand = qty_on_hand - ? WHERE sku=?",
+                (i["qty"], i["sku"]),
             )
             line_tax = round((i["line"] / sub) * tax if sub > 0 else 0, 2)
             cur.execute(
@@ -147,6 +148,38 @@ def cancel_order():
     lbl_sub.config(text="Sub: $0.00")
     lbl_tax.config(text="Tax: $0.00")
     lbl_tot.config(text="Total: $0.00")
+
+
+def logout():
+    global current_user, current_role
+    current_user = None
+    current_role = None
+    cart.clear()
+    cancel_order()
+    admin_frame.pack_forget()
+    cashier_frame.pack_forget()
+    nav.pack_forget()
+    login_frame.pack(fill="both", expand=True)
+    user_entry.delete(0, tk.END)
+    pass_entry.delete(0, tk.END)
+    user_entry.focus()
+
+
+def change_password():
+    target = chg_user_ent.get().strip()
+    new_pw = chg_pass_ent.get().strip()
+    if not target or not new_pw:
+        return messagebox.showwarning("Input", "Enter user and new password")
+    cur.execute(
+        "UPDATE users SET password_hash=? WHERE username=?", (hash_pw(new_pw), target)
+    )
+    con.commit()
+    if cur.rowcount == 0:
+        messagebox.showerror("Error", "User not found")
+    else:
+        messagebox.showinfo("Success", "Password updated")
+        chg_user_ent.delete(0, tk.END)
+        chg_pass_ent.delete(0, tk.END)
 
 
 con = sqlite3.connect("register.db")
@@ -185,22 +218,23 @@ cur.execute(
 );"""
 )
 con.commit()
-cur.execute("SELECT COUNT(*) FROM inventory")
-if cur.fetchone()[0] == 0:
-    seeds = [
-        ("1001", "Notebook", 1.50, 3.99, 50),
-        ("1002", "Ballpoint Pen", 0.30, 1.25, 200),
-        ("1003", "Stapler", 4.00, 8.99, 30),
-        ("1004", "Paper Ream", 3.50, 7.49, 40),
-        ("1005", "Highlighter", 0.40, 1.99, 150),
-        ("1006", "Binder", 2.00, 5.99, 60),
-        ("1007", "Scissors", 1.80, 4.49, 45),
-        ("1008", "Tape Dispenser", 2.50, 6.99, 35),
-        ("1009", "Desk Organizer", 6.00, 14.99, 20),
-        ("1010", "Sticky Notes", 0.90, 2.49, 100),
-    ]
-    cur.executemany("INSERT INTO inventory VALUES (?, ?, ?, ?, ?)", seeds)
-    con.commit()
+
+# cur.execute("SELECT COUNT(*) FROM inventory")
+# if cur.fetchone()[0] == 0:
+#     seeds = [
+#         ("1001", "Notebook", 1.50, 3.99, 50),
+#         ("1002", "Ballpoint Pen", 0.30, 1.25, 200),
+#         ("1003", "Stapler", 4.00, 8.99, 30),
+#         ("1004", "Paper Ream", 3.50, 7.49, 40),
+#         ("1005", "Highlighter", 0.40, 1.99, 150),
+#         ("1006", "Binder", 2.00, 5.99, 60),
+#         ("1007", "Scissors", 1.80, 4.49, 45),
+#         ("1008", "Tape Dispenser", 2.50, 6.99, 35),
+#         ("1009", "Desk Organizer", 6.00, 14.99, 20),
+#         ("1010", "Sticky Notes", 0.90, 2.49, 100),
+#     ]
+#     cur.executemany("INSERT INTO inventory VALUES (?, ?, ?, ?, ?)", seeds)
+#     con.commit()
 
 cur.execute("SELECT COUNT(*) FROM users")
 if cur.fetchone()[0] == 0:
@@ -215,6 +249,7 @@ root.title("Cash Register")
 root.geometry("750x550")
 
 nav = tk.Frame(root)
+ttk.Button(nav, text="Logout", command=logout).pack(side="right", padx=5)
 nav.pack_forget()
 
 admin_frame = tk.Frame(root)
@@ -224,6 +259,15 @@ cashier_frame = tk.Frame(root)
 ttk.Label(admin_frame, text="Admin Panel", font=("Arial", 16)).pack(pady=20)
 u_frame = tk.Frame(admin_frame)
 u_frame.pack(fill="x", padx=10, pady=5)
+
+p_frame = tk.Frame(admin_frame)
+p_frame.pack(fill="x", padx=10, pady=5)
+ttk.Label(p_frame, text="Change Password:", font=("Arial", 10, "bold")).pack(anchor="w")
+chg_user_ent = ttk.Entry(p_frame, width=12)
+chg_user_ent.pack(side="left", padx=2)
+chg_pass_ent = ttk.Entry(p_frame, width=12, show="*")
+chg_pass_ent.pack(side="left", padx=2)
+ttk.Button(p_frame, text="Update", command=change_password).pack(side="left", padx=5)
 
 i_frame = tk.Frame(admin_frame)
 i_frame.pack(fill="x", padx=10, pady=5)
