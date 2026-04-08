@@ -2,10 +2,11 @@ import sqlite3
 import tkinter as tk
 from tkinter import ttk, messagebox
 import hashlib
+from datetime import datetime
 
 
 def hash_pw(pw):
-    return hashlib.sha256(pw.encode()).hexdigest()
+    return hashlib.sha512(pw.encode()).hexdigest()
 
 
 def verify_user(username, pw):
@@ -36,7 +37,7 @@ def add_item():
         desc = i_desc.get().strip()
         cost = float(i_cost.get())
         price = float(i_price.get())
-        qty = int(i_price.get())
+        qty = int(i_qty.get())
 
         if price < 0 or cost < 0 or qty < 0:
             raise ValueError
@@ -69,6 +70,83 @@ def refresh_inventory():
             "end",
             values=(sku, desc, f"${cost:.2f}", f"${price:.2f}", qty, f"${profit:.2f}"),
         )
+
+
+cart = []
+
+
+def scan_item():
+    sku = c_sku.get().strip()
+    try:
+        qty = int(c_qty.get())
+    except ValueError:
+        return messagebox.showerror("Input", "Invalid Quantity")
+    if qty <= 0:
+        return messagebox.showwarning("Input", "Invalid Quantity")
+    cur.execute(
+        "SELECT description, sale_price, qty_on_hand FROM inventory WHERE sku=?", (sku,)
+    )
+    row = cur.fetchone()
+    if not row:
+        return messagebox.showerror("Error", "SKU not found")
+    if qty > row[2]:
+        return messagebox.showerror("Stock", "Not enough inventory")
+
+    line = round(row[1] * qty, 2)
+    cart.append({"sku": sku, "desc": row[0], "qty": qty, "line": line})
+    cart_tree.insert("", "end", values=(sku, row[0], qty, f"${line:.2f}"))
+
+    c_sku.delete(0, tk.END)
+    c_qty.delete(0, tk.END)
+
+    sub = round(sum(i["line"] for i in cart), 2)
+    tax = round(sub * 0.055, 2)
+
+    lbl_sub.config(text=f"Sub: ${sub:.2f}")
+    lbl_tax.config(text=f"Tax: ${tax:.2f}")
+    lbl_tot.config(text=f"Total: ${sub + tax:.2f}")
+
+
+def complete_sale():
+    global cart
+    if not cart:
+        return messagebox.showwarning("Cart", "Empty")
+    sub = round(sum(i["line"] for i in cart), 2)
+    tax = round(sum(i["line"] for i in cart) * 0.055, 2)
+    tot = round(sub + tax, 2)
+    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    try:
+        for i in cart:
+            cur.execute(
+                "UPDATE inventory SET qty_on_hand - ? WHERE sku=?", (i["qty"], i["sku"])
+            )
+            line_tax = round((i["line"] / sub) * tax if sub > 0 else 0, 2)
+            cur.execute(
+                "INSERT INTO transactions (ts, sku, qty, subtotal, tax, total, recorded_by) VALUES (?,?,?,?,?,?,?)",
+                (
+                    ts,
+                    i["sku"],
+                    i["qty"],
+                    i["line"],
+                    line_tax,
+                    i["line"] + line_tax,
+                    current_user,
+                ),
+            )
+        con.commit()
+        messagebox.showinfo("Paid", f"Total: ${tot:.2f}")
+        cancel_order()
+    except Exception as e:
+        con.rollback()
+        messagebox.showerror("DB Error", str(e))
+
+
+def cancel_order():
+    cart.clear()
+    cart_tree.delete(*cart_tree.get_children())
+    lbl_sub.config(text="Sub: $0.00")
+    lbl_tax.config(text="Tax: $0.00")
+    lbl_tot.config(text="Total: $0.00")
 
 
 con = sqlite3.connect("register.db")
@@ -195,6 +273,39 @@ ttk.Button(u_frame, text="Add User", command=add_user).pack(side="left", padx=5)
 
 # Cashier frame
 ttk.Label(cashier_frame, text="Cashier Panel", font=("Arial", 16)).pack(pady=20)
+c_input = tk.Frame(cashier_frame)
+c_input.pack(fill="x", padx=10, pady=5)
+ttk.Label(c_input, text="SKU:", width=5).pack(side="left")
+c_sku = ttk.Entry(c_input, width=10)
+c_sku.pack(side="left", padx=2)
+ttk.Label(c_input, text="Qty:", width=5).pack(side="left")
+c_qty = ttk.Entry(c_input, width=5)
+c_qty.pack(side="left", padx=2)
+ttk.Button(c_input, text="Add", command=scan_item).pack(side="left", padx=5)
+
+cart_tree = ttk.Treeview(
+    cashier_frame, columns=("sku", "desc", "qty", "line"), show="headings", height=5
+)
+cart_tree.pack(fill="x", padx=10, pady=5)
+for c, w in zip(("sku", "desc", "qty", "line"), (60, 140, 40, 70)):
+    cart_tree.heading(c, text=c.upper())
+    cart_tree.column(c, width=w, anchor="center")
+
+t_frame = tk.Frame(cashier_frame)
+t_frame.pack(fill="x", padx=10, pady=5)
+lbl_sub = ttk.Label(t_frame, text="Sub: $0.00")
+lbl_sub.pack(side="left", padx=5)
+lbl_tax = ttk.Label(t_frame, text="Tax(5.5%): $0.00")
+lbl_tax.pack(side="left", padx=5)
+lbl_tot = ttk.Label(t_frame, text="Total: $0.00", font=("Arial", 10, "bold"))
+lbl_tot.pack(side="left", padx=5)
+
+btn_f = tk.Frame(cashier_frame)
+btn_f.pack(pady=10)
+ttk.Button(btn_f, text="Complete Sale", command=complete_sale).pack(
+    side="left", padx=10
+)
+ttk.Button(btn_f, text="Cancel", command=cancel_order).pack(side="left", padx=10)
 
 
 current_user = None
