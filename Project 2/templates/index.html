@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Weather</title>
+    <link rel="stylesheet" href="https://cdn.simplecss.org/simple.min.css">
+    <style>
+        .forecast-container {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+            margin-top: 1rem;
+        }
+
+        .forecast-table {
+            flex: 1;
+            min-width: 300px;
+        }
+
+        .forecast-table table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .forecast-table th,
+        .forecast-table td {
+            padding: 6px 8px;
+            text-align: left;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Weather by ZIP</h1>
+    <form method="post">
+        ZIP Code: <input type="text" name="zip" required>
+        <input type="submit" value="Get Forecast">
+    </form>
+    {% if result.error %}
+    <p class="notice" style="color:red; background-color:rgba(255, 0, 0, 0.2);">{{ result.error }}</p>
+    {% elif result %}
+    <div class="forecast-container">
+        <div class="forecast-table">
+            <h3>{{ result.city }}, {{ result.state }} {{ result.lat }}, {{ result.long }}</h3>
+            <table border=1>
+                <tr>
+                    <th>Period</th>
+                    <th>Forecast</th>
+                    <th>Temp</th>
+                    <th>Icon</th>
+                </tr>
+                {% for p in result.periods %}
+                <tr>
+                    <td>{{ p.name }}</td>
+                    <td>{{ p.shortForecast }}</td>
+                    <td>{{ p.temperature }} {{ p.temperatureUnit }}</td>
+                    <td><img src="{{ p.icon }}" alt="{{ p.shortForecast }}" width="50"></td>
+                </tr>
+                {% endfor %}
+            </table>
+        </div>
+        <div class="forecast-table">
+            <h3>Hourly Forecast (Next 12 Hours)</h3>
+            <table border=1>
+                <tr>
+                    <th>Time</th>
+                    <th>Forecast</th>
+                    <th>Temp</th>
+                    <th>Icon</th>
+                </tr>
+                {% for p in result.hourly_periods %}
+                <tr>
+                    <td>{{ p.startTime.split('T')[1][:5] }}</td>
+                    <td>{{ p.shortForecast }}</td>
+                    <td>{{ p.temperature }} {{ p.temperatureUnit }}</td>
+                    <td><img src="{{ p.icon }}" alt="{{ p.shortForecast }}" width="50"></td>
+                </tr>
+                {% endfor %}
+            </table>
+        </div>
+    </div>
+    {% endif %}
+</body>
+
+</html>
